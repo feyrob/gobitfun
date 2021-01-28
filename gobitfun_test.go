@@ -2,15 +2,16 @@ package gobitfun
 
 import (
 	"fmt"
-	"math"
-	"math/bits"
+	//"math"
+	//	"math/bits"
 	"strconv"
 	"testing"
 
-	"encoding/binary"
+	//"encoding/binary"
 
+	"os"
 	"reflect"
-	"sort"
+	//	"sort"
 )
 
 func Test_fib_encode_decode(t *testing.T) {
@@ -70,6 +71,19 @@ func Test_cont_encode_decode(t *testing.T) {
 	}
 }
 
+func Test_create_chart(t *testing.T) {
+	f, _ := os.Create(`C:\Users\feyro\test.xml`)
+	defer f.Close()
+	f.Write([]byte("<blah>"))
+	for i := 1; i < 10000; i = int((float64(i) * 1.1) + 1.0) {
+		s := fmt.Sprintf("<blupp foo=\"%d\" bar=\"%d\" />", i, i*i)
+		f.Write([]byte(s))
+	}
+
+	f.Write([]byte("</blah>"))
+
+}
+
 func Test_sorted_id_list_encode(t *testing.T) {
 
 }
@@ -77,339 +91,46 @@ func Test_sorted_id_list_encode(t *testing.T) {
 func Test_encode_decode_f64_map(t *testing.T) {
 	fmt.Println("hi")
 	//Encode_f64_map
-}
 
-func Encode_f64_map(m map[uint32]float64) []byte {
-	used_sub_maps_mask := uint8(0)
-	c0_key_list := make([]uint32, 0)
-	c1_key_list := make([]uint32, 0)
-	ce_uint_map := make(map[uint32][]byte)   // continuation encoded uints
-	ce_negint_map := make(map[uint32][]byte) // continuation encoded uints * -1
-	f32_map := make(map[uint32]float32)
-	f64_map := make(map[uint32]float64)
+	orig := map[uint32]float64{
+		10:    0.0,
+		20:    1.0,
+		25:    1.0,
+		30:    float64(float32(1.0 / 3)),
+		35:    1.0 / 3.0,
+		40:    -1.0,
+		50:    -0.0,
+		60:    10000000000,
+		700:   10000000000.1,
+		80000: 123,
+		80255: 123,
+		80256: 123,
+		90123: 0.0,
 
-	for key_id, f64 := range m {
-		if f64 == 0 {
-			c0_key_list = append(c0_key_list, key_id)
-			continue
-		}
-		if f64 == 1 {
-			c1_key_list = append(c1_key_list, key_id)
-			continue
-		}
-
-		// if it is a positive integer and it can be stored in less than 4 bytes, then do so
-		u32 := uint32(f64)
-		if f64 == float64(u32) {
-			b := Cont_encode(uint64(u32))
-			if len(b) < 4 {
-				ce_uint_map[key_id] = b
-				continue
-			}
-		}
-
-		// if it is a negative integer and it can be stored in less than 4 bytes, then do so
-		neg32 := uint32(-f64)
-		if f64 == -float64(neg32) {
-			b := Cont_encode(uint64(neg32))
-			if len(b) < 4 {
-				ce_negint_map[key_id] = b
-				continue
-			}
-		}
-
-		// if it can be stored as f32
-		f32 := float32(f64)
-		if f64 == float64(f32) {
-			f32_map[key_id] = f32
-			continue
-
-		}
-
-		// if it is a positive integer and it can be stored in less than 8 bytes, then do so
-		u64 := uint64(f64)
-		if f64 == float64(u64) {
-			b := Cont_encode(u64)
-			if len(b) < 8 {
-				ce_uint_map[key_id] = b
-				continue
-			}
-		}
-
-		// if it is a negative integer and it can be stored in less than 8 bytes, then do so
-		neg64 := uint64(-f64)
-		if f64 == -float64(neg64) {
-			b := Cont_encode(neg64)
-			if len(b) < 8 {
-				ce_negint_map[key_id] = b
-				continue
-			}
-		}
-
-		f64_map[key_id] = f64
+		100000: 63,
+		100001: 65,
+		100002: 100002,
+		100003: 100003,
+		100004: 100004,
+		100005: 100005,
+		100006: 100006,
+		100007: 100007,
 	}
 
-	out_buf := make([]byte, 0, 256)
+	encoded := Encode_f64_map(orig)
 
-	// remember which sub maps are used
-	if len(f64_map) != 0 {
-		used_sub_maps_mask |= 1
+	bit_str := Get_bit_str(encoded)
+	fmt.Println("encoded:", bit_str)
+
+	next := uint64(0)
+	restored := Decode_f64_map(encoded, &next)
+
+	eq := reflect.DeepEqual(orig, restored)
+	if eq {
+		fmt.Println("yay")
+	} else {
+		fmt.Println("meh")
 	}
-
-	used_sub_maps_mask = used_sub_maps_mask << 1
-	if len(f32_map) != 0 {
-		used_sub_maps_mask |= 1
-	}
-
-	used_sub_maps_mask = used_sub_maps_mask << 1
-	if len(ce_negint_map) != 0 {
-		used_sub_maps_mask |= 1
-	}
-
-	used_sub_maps_mask = used_sub_maps_mask << 1
-	if len(ce_uint_map) != 0 {
-		used_sub_maps_mask |= 1
-	}
-
-	used_sub_maps_mask = used_sub_maps_mask << 1
-	if len(c1_key_list) != 0 {
-		used_sub_maps_mask |= 1
-	}
-
-	used_sub_maps_mask = used_sub_maps_mask << 1
-	if len(c0_key_list) != 0 {
-		used_sub_maps_mask |= 1
-	}
-
-	out_buf = append(out_buf, byte(used_sub_maps_mask))
-
-	bit_offset := len(out_buf) * 8
-
-	if len(c0_key_list) != 0 {
-		Fib_encode(uint64(len(c0_key_list)), &out_buf, &bit_offset)
-	}
-	if len(c1_key_list) != 0 {
-		Fib_encode(uint64(len(c1_key_list)), &out_buf, &bit_offset)
-	}
-	if len(ce_uint_map) != 0 {
-		Fib_encode(uint64(len(ce_uint_map)), &out_buf, &bit_offset)
-	}
-	if len(ce_negint_map) != 0 {
-		Fib_encode(uint64(len(ce_negint_map)), &out_buf, &bit_offset)
-	}
-	if len(f32_map) != 0 {
-		Fib_encode(uint64(len(f32_map)), &out_buf, &bit_offset)
-	}
-	if len(f64_map) != 0 {
-		Fib_encode(uint64(len(f64_map)), &out_buf, &bit_offset)
-	}
-
-	// c0 list
-	if len(c0_key_list) != 0 {
-
-		sort.Slice(c0_key_list, func(i, j int) bool { return c0_key_list[i] < c0_key_list[j] })
-		for _, c0_key := range c0_key_list {
-			key_id_buf := Cont_encode(uint64(c0_key))
-			out_buf = append(out_buf, key_id_buf...)
-		}
-	}
-
-	// c1 list
-	if len(c1_key_list) != 0 {
-
-		sort.Slice(c1_key_list, func(i, j int) bool { return c1_key_list[i] < c1_key_list[j] })
-		for _, c1_key := range c1_key_list {
-			key_id_buf := Cont_encode(uint64(c1_key))
-			out_buf = append(out_buf, key_id_buf...)
-		}
-	}
-
-	// uint map
-	if len(ce_uint_map) != 0 {
-
-		uint_keys := make([]uint32, 0)
-		for k, _ := range ce_uint_map {
-			uint_keys = append(uint_keys, k)
-		}
-		sort.Slice(uint_keys, func(i, j int) bool { return uint_keys[i] < uint_keys[j] })
-
-		for _, k := range uint_keys {
-			v := ce_uint_map[k]
-			key_id_buf := Cont_encode(uint64(k))
-			out_buf = append(out_buf, key_id_buf...)
-			out_buf = append(out_buf, v...)
-		}
-	}
-
-	// negint map
-	if len(ce_negint_map) != 0 {
-
-		uint_keys := make([]uint32, 0)
-		for k, _ := range ce_negint_map {
-			uint_keys = append(uint_keys, k)
-		}
-		sort.Slice(uint_keys, func(i, j int) bool { return uint_keys[i] < uint_keys[j] })
-
-		for _, k := range uint_keys {
-			v := ce_negint_map[k]
-			key_id_buf := Cont_encode(uint64(k))
-			out_buf = append(out_buf, key_id_buf...)
-			out_buf = append(out_buf, v...)
-		}
-	}
-
-	// f32 map
-	if len(f32_map) != 0 {
-
-		f32_keys := make([]uint32, 0)
-		for k, _ := range f32_map {
-			f32_keys = append(f32_keys, k)
-		}
-		sort.Slice(f32_keys, func(i, j int) bool { return f32_keys[i] < f32_keys[j] })
-		for _, k := range f32_keys {
-			v := f32_map[k]
-			key_id_buf := Cont_encode(uint64(k))
-			out_buf = append(out_buf, key_id_buf...)
-
-			f32_buf := make([]byte, 4)
-			binary.LittleEndian.PutUint32(f32_buf, math.Float32bits(v))
-			out_buf = append(out_buf, f32_buf...)
-		}
-	}
-
-	// f64 map
-	if len(f64_map) != 0 {
-
-		f64_keys := make([]uint32, 0)
-		for k, _ := range f64_map {
-			f64_keys = append(f64_keys, k)
-		}
-		sort.Slice(f64_keys, func(i, j int) bool { return f64_keys[i] < f64_keys[j] })
-		for _, k := range f64_keys {
-			v := f64_map[k]
-			key_id_buf := Cont_encode(uint64(k))
-			out_buf = append(out_buf, key_id_buf...)
-
-			f64_buf := make([]byte, 8)
-			binary.LittleEndian.PutUint64(f64_buf, math.Float64bits(v))
-			out_buf = append(out_buf, f64_buf...)
-		}
-	}
-	return out_buf
-}
-
-func Decode_f64_map(b []byte, next *uint64) map[uint32]float64 {
-
-	f64_map := make(map[uint32]float64)
-
-	used_sub_maps_mask := b[*next]
-	*next++
-
-	used_subcontainer_count := bits.OnesCount8(uint8(used_sub_maps_mask))
-
-	bit_idx := int((*next) * 8)
-	subcontainer_lengths := make([]uint64, used_subcontainer_count)
-	for i := 0; i < used_subcontainer_count; i++ {
-		n := Fib_decode(b, &bit_idx)
-		subcontainer_lengths[i] = n
-	}
-	cur_subcontainer_idx := 0
-	*next = uint64((bit_idx + 7) / 8) // round up to full bytes
-
-	// c0 list
-	if used_sub_maps_mask&1 == 1 {
-		c0_list_len := subcontainer_lengths[cur_subcontainer_idx]
-		cur_subcontainer_idx++
-		remaining_c0_entry_count := c0_list_len
-		for remaining_c0_entry_count > 0 {
-			key_id := Cont_decode(b, next)
-			f64_map[uint32(key_id)] = 0.0
-			remaining_c0_entry_count--
-		}
-	}
-	used_sub_maps_mask = used_sub_maps_mask >> 1
-
-	// c1 list
-	if used_sub_maps_mask&1 == 1 {
-		c1_list_len := subcontainer_lengths[cur_subcontainer_idx]
-		cur_subcontainer_idx++
-
-		remaining_c1_entry_count := c1_list_len
-		for remaining_c1_entry_count > 0 {
-			key_id := Cont_decode(b, next)
-			f64_map[uint32(key_id)] = 1.0
-			remaining_c1_entry_count--
-		}
-	}
-	used_sub_maps_mask = used_sub_maps_mask >> 1
-
-	// uint map
-	if used_sub_maps_mask&1 == 1 {
-		uint_map_len := subcontainer_lengths[cur_subcontainer_idx]
-		cur_subcontainer_idx++
-
-		remaining_uint_entry_count := uint_map_len
-		for remaining_uint_entry_count > 0 {
-			key_id := Cont_decode(b, next)
-			val := Cont_decode(b, next)
-			f64_map[uint32(key_id)] = float64(val)
-			remaining_uint_entry_count--
-		}
-	}
-	used_sub_maps_mask = used_sub_maps_mask >> 1
-
-	// negint map
-	if used_sub_maps_mask&1 == 1 {
-		negint_map_len := subcontainer_lengths[cur_subcontainer_idx]
-		cur_subcontainer_idx++
-
-		remaining_uint_entry_count := negint_map_len
-		for remaining_uint_entry_count > 0 {
-			key_id := Cont_decode(b, next)
-			val := Cont_decode(b, next)
-			f64_map[uint32(key_id)] = -float64(val)
-			remaining_uint_entry_count--
-		}
-	}
-	used_sub_maps_mask = used_sub_maps_mask >> 1
-
-	// f32 map
-	if used_sub_maps_mask&1 == 1 {
-		f32_map_len := subcontainer_lengths[cur_subcontainer_idx]
-		cur_subcontainer_idx++
-
-		remaining_f32_entry_count := f32_map_len
-		for remaining_f32_entry_count > 0 {
-			key_id := Cont_decode(b, next)
-			f32_val_buf := b[*next : *next+4]
-			*next += 4
-			f32_val_bits := binary.LittleEndian.Uint32(f32_val_buf)
-			f32_val := math.Float32frombits(f32_val_bits)
-			f64_map[uint32(key_id)] = float64(f32_val)
-			remaining_f32_entry_count--
-		}
-	}
-	used_sub_maps_mask = used_sub_maps_mask >> 1
-
-	// f64 map
-	if used_sub_maps_mask&1 == 1 {
-		f64_map_len := subcontainer_lengths[cur_subcontainer_idx]
-		cur_subcontainer_idx++
-
-		remaining_f64_entry_count := f64_map_len
-		for remaining_f64_entry_count > 0 {
-			key_id := Cont_decode(b, next)
-			f64_val_buf := b[*next : *next+8]
-			*next += 8
-			f64_val_bits := binary.LittleEndian.Uint64(f64_val_buf)
-			f64_val := math.Float64frombits(f64_val_bits)
-			f64_map[uint32(key_id)] = f64_val
-			remaining_f64_entry_count--
-		}
-	}
-	used_sub_maps_mask = used_sub_maps_mask >> 1
-
-	return f64_map
 }
 
 func Get_bit_str(byts []byte) string {
@@ -430,7 +151,7 @@ func Get_bit_str(byts []byte) string {
 // - string compression - replace numbers with placeholders
 
 func Test_4(t *testing.T) {
-	return
+
 	orig_m := map[uint32]float64{
 		10:    0.0,
 		20:    1.0,
@@ -446,10 +167,10 @@ func Test_4(t *testing.T) {
 		80256: 123,
 	}
 
-	s := Serialize_f64_map(orig_m)
+	s := Encode_f64_map(orig_m)
 
 	next_idx := uint64(0)
-	restored_m := Deserialize_f64_map(s, &next_idx)
+	restored_m := Decode_f64_map(s, &next_idx)
 
 	eq := reflect.DeepEqual(orig_m, restored_m)
 	if !eq {
@@ -468,7 +189,17 @@ func Demo_compress(l []uint64, prefix_1_count_to_value_bit_count []int, prefix_1
 	s += " -> "
 
 	fmt.Println(l)
-	compressed_l_bytes, _ := Po_encode_u64_list(l, prefix_1_count_to_value_bit_count, prefix_1_count_to_value_offset)
+
+	compressed_l_bytes := []byte{}
+	Next_bit_offset := uint64(0)
+	for _, v := range l {
+		Po_encode_u64(&compressed_l_bytes, prefix_1_count_to_value_bit_count, prefix_1_count_to_value_offset, v, &Next_bit_offset)
+	}
+
+	bit_len := Bit_len(compressed_l_bytes, Next_bit_offset)
+	fmt.Println("bit_len:", bit_len)
+
+	//compressed_l_bytes, _ := Po_encode_u64_list(l, prefix_1_count_to_value_bit_count, prefix_1_count_to_value_offset)
 
 	bit_str := Get_bit_str(compressed_l_bytes)
 	fmt.Println(bit_str)
@@ -499,33 +230,38 @@ func Get_prefix_1_count_to_value_offset(prefix_1_count_to_value_bit_count []int)
 	return r
 }
 
-func Test_p1_compress(t *testing.T) {
+func Test_delta_fib_encode_sorted_id_list(t *testing.T) {
+	l := []uint64{0, 2, 10, 11} // sorted and each entry is unique
+
+	delta_l := Sorted_id_list_to_delta_list(l)
+	restored_l := Delta_list_to_sorted_id_list(delta_l)
+
+	eq := reflect.DeepEqual(l, restored_l)
+	if eq {
+		fmt.Println("yay")
+	} else {
+		fmt.Println("meh")
+	}
+
+	fmt.Println("delta_l:", delta_l)
 	return
 
-	prefix_1_count_to_value_bit_count := []int{
-		1,  // 0 and 1 compress nicely // good enough for sparse and good for bool storage
-		5,  // id deltas
-		8,  // remaining 8 bit values; nice random u8
-		12, // less aggressive step to encode human numbers (stuff smaller than 4000)
-		16, // nice random u16
-		20, // less aggressive step to encode human numbers (stuff smaller than 1 000 000)
-		32, // nice random u32
-		63, // most u64 (not at 7, 15, or 31, since too much cost would be passed on)
-		64, // nice random u64
-	}
-	bit_counts := prefix_1_count_to_value_bit_count
+}
 
-	prefix_1_count_to_value_offset := Get_prefix_1_count_to_value_offset(prefix_1_count_to_value_bit_count)
-	value_offsets := prefix_1_count_to_value_offset
+func Test_p1_compress(t *testing.T) {
+
+	bit_counts := Po__general_purpose__prefix_1_count_to_value_bit_count
+
+	value_offsets := Po__general_purpose__prefix_1_count_to_value_offset
 
 	fmt.Println("===")
 
 	fmt.Println("prefix_1_count_to_value_bit_count:")
-	for k, v := range prefix_1_count_to_value_bit_count {
+	for k, v := range bit_counts {
 		fmt.Println("-", k, "->", v)
 	}
 	fmt.Println("prefix_1_count_to_value_offset:")
-	for prefix_1_count, value_offset := range prefix_1_count_to_value_offset {
+	for prefix_1_count, value_offset := range Po__general_purpose__prefix_1_count_to_value_offset {
 		fmt.Println("-", prefix_1_count, "->", value_offset)
 	}
 	fmt.Println("")

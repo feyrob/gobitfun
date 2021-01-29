@@ -427,6 +427,7 @@ func Encode_f64_map(m map[uint32]float64) []byte {
 	// c1 list
 	if len(c1_key_list) != 0 {
 		sort.Slice(c1_key_list, func(i, j int) bool { return c1_key_list[i] < c1_key_list[j] })
+		// TODO delta encode
 		for _, c1_key := range c1_key_list {
 			Fib_encode(uint64(c1_key), &out_buf, &bit_offset)
 		}

@@ -241,16 +241,6 @@ func Demo_compress(l []uint64, prefix_1_count_to_value_bit_count []int, prefix_1
 
 }
 
-func Get_prefix_1_count_to_value_offset(prefix_1_count_to_value_bit_count []int) []uint64 {
-	current_representable_max := uint64(0)
-	r := make([]uint64, len(prefix_1_count_to_value_bit_count))
-	for k, v := range prefix_1_count_to_value_bit_count {
-		r[k] = current_representable_max
-		current_representable_max += 1 << v
-	}
-	return r
-}
-
 func Test_delta_fib_encode_sorted_id_list(t *testing.T) {
 	l := []uint64{0, 2, 10, 11} // sorted and each entry is unique
 

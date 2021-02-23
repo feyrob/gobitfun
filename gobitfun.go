@@ -159,6 +159,16 @@ var Po__cer__prefix_1_count_to_value_bit_count []int = []int{
 }
 var Po__cer__prefix_1_count_to_value_offset []uint64 = Get_prefix_1_count_to_value_offset(Po__cer__prefix_1_count_to_value_bit_count)
 
+func Get_prefix_1_count_to_value_offset(prefix_1_count_to_value_bit_count []int) []uint64 {
+	current_representable_max := uint64(0)
+	r := make([]uint64, len(prefix_1_count_to_value_bit_count))
+	for k, v := range prefix_1_count_to_value_bit_count {
+		r[k] = current_representable_max
+		current_representable_max += 1 << v
+	}
+	return r
+}
+
 func Po_encode_u64(b *[]byte, prefix_1_count_to_value_bit_count []int, prefix_1_count_to_value_offset []uint64, v uint64, Next_bit_offset *uint64) {
 	prefix_1_count := 0
 	value_offset := uint64(0)

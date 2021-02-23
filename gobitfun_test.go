@@ -14,6 +14,27 @@ import (
 	//	"sort"
 )
 
+// TODO dict_list - delta dicts
+// a delta dict can copy a previous dict via other_dict_idx
+// a delta dict can not remove or add any dict fields
+// a delta dict can overwrite any number of fields with new values
+
+// TODO
+type Telemetry_event struct {
+	epoch_millis int64
+	// epoch starts at 1970
+	// int64 supports up to 2^63 future milliseconds
+	// / 1000 -> seconds
+	// / 60 -> minutes
+	// / 60 -> hours
+	// / 24 -> days
+	// / 365 -> ~years
+	// = (2^64)/1000/60/60/24/365 = 584942417.355 years
+
+	f64_fields map[string]float64
+	str_fields map[string]string
+}
+
 func Test_fib_encode_decode(t *testing.T) {
 	//l := []uint64{1, 9, 10, 11, math.MaxUint64 / 2}
 	l := []uint64{1, 2, 9, 10, 11}
